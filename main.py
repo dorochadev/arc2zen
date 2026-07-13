@@ -16,16 +16,18 @@ from core import Colors, export_to_html, ArcDataError
 
 def is_zen_running() -> bool:
     """Check if Zen Browser is running (macOS only)."""
-    # Проверяем несколько возможных имен процесса
-    patterns = ["zen", "Zen Browser", "zen-browser"]
-    for pattern in patterns:
-        result = subprocess.run(
-            ["pgrep", "-if", pattern],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0:
-            return True
+    import os
+    current_pid = os.getpid()
+    
+    # Ищем процесс Zen, исключая текущий процесс
+    result = subprocess.run(
+        ["pgrep", "-f", "^.*[Zz]en(?:$| )", "-v", str(current_pid)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        print(f"Zen Browser is running: {result.stdout.strip()}")
+        return True
     return False
 
 
