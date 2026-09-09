@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 from core import Colors, export_to_html, ArcDataError
+from core.zen_profile import find_zen_profile
 
 
 def is_zen_running() -> bool:
@@ -41,20 +42,8 @@ def wait_for_zen_closed():
 
 
 def get_zen_profile_path() -> Path | None:
-    """Find default Zen Browser profile (macOS only)."""
-    zen_root = Path.home() / "Library" / "Application Support" / "zen" / "Profiles"
-    
-    if not zen_root.exists():
-        return None
-    
-    for profile_dir in zen_root.iterdir():
-        if profile_dir.is_dir() and "default" in profile_dir.name.lower():
-            return profile_dir
-    
-    for profile_dir in zen_root.iterdir():
-        if profile_dir.is_dir():
-            return profile_dir
-    return None
+    """Find the profile that Zen's installed build is configured to use."""
+    return find_zen_profile()
 
 
 def get_backup_files() -> List[Tuple[Path, str]]:

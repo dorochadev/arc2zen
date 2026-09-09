@@ -23,6 +23,7 @@ except ImportError:
 
 from .models import Bookmark, BookmarkFolder, ArcSpace
 from .arc_exporter import ArcDataReader, ArcDataParser
+from .zen_profile import find_zen_profile
 
 
 # ============== LZ4 File Operations ==============
@@ -42,25 +43,6 @@ def write_lz4_json(path: Path, data: dict):
     with open(path, "wb") as f:
         f.write(b"mozLz40\0")
         f.write(compressed)
-
-
-# ============== Zen Profile ==============
-
-def find_zen_profile() -> Optional[Path]:
-    """Find default Zen Browser profile (macOS only)."""
-    zen_root = Path.home() / "Library" / "Application Support" / "zen" / "Profiles"
-
-    if not zen_root.exists():
-        return None
-
-    for profile_dir in zen_root.iterdir():
-        if profile_dir.is_dir() and "default" in profile_dir.name.lower():
-            return profile_dir
-
-    for profile_dir in zen_root.iterdir():
-        if profile_dir.is_dir():
-            return profile_dir
-    return None
 
 
 # ============== ID Generation ==============
@@ -304,6 +286,11 @@ def get_arc_spaces() -> List[ArcSpace]:
 def get_zen_workspaces(profile_path: Path) -> Dict[str, str]:
     """Get Zen workspaces as {name: uuid} mapping."""
     zen_path = profile_path / "zen-sessions.jsonlz4"
+    if not zen_path.exists():
+        raise FileNotFoundError(
+            f"Zen session data was not found in profile '{profile_path.name}'. "
+            "Open Zen Browser once, then close it and try again."
+        )
     data = read_lz4_json(zen_path)
     
     workspaces = {}

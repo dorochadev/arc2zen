@@ -16,6 +16,7 @@ except ImportError:
 
 from .models import Bookmark, BookmarkFolder
 from .arc_exporter import HTMLExporter, sanitize_filename, _get_base_and_ext
+from .zen_profile import find_zen_profile
 
 
 def read_lz4_json(path: Path) -> dict:
@@ -25,23 +26,6 @@ def read_lz4_json(path: Path) -> dict:
     if data[:8] != b"mozLz40\0":
         raise ValueError(f"Invalid mozlz4 format: {path}")
     return json.loads(lz4.block.decompress(data[8:]))
-
-
-def find_zen_profile() -> Optional[Path]:
-    """Find default Zen Browser profile (macOS only)."""
-    zen_root = Path.home() / "Library" / "Application Support" / "zen" / "Profiles"
-
-    if not zen_root.exists():
-        return None
-
-    for profile_dir in zen_root.iterdir():
-        if profile_dir.is_dir() and "default" in profile_dir.name.lower():
-            return profile_dir
-
-    for profile_dir in zen_root.iterdir():
-        if profile_dir.is_dir():
-            return profile_dir
-    return None
 
 
 def get_zen_data(profile_path: Path) -> dict:

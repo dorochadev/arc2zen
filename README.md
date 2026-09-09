@@ -19,7 +19,7 @@ A tool for exporting bookmarks from Arc Browser and Zen Browser to HTML format, 
 ### With uv (recommended)
 
 ```bash
-git clone https://github.com/yourusername/arc2zen.git
+git clone https://github.com/olegfour3/arc2zen.git
 cd arc2zen
 uv run main.py
 ```
@@ -29,7 +29,7 @@ uv run main.py
 ### With pip
 
 ```bash
-git clone https://github.com/yourusername/arc2zen.git
+git clone https://github.com/olegfour3/arc2zen.git
 cd arc2zen
 pip install lz4
 python main.py
