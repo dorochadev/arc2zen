@@ -165,25 +165,33 @@ def delete_all_backups() -> int:
 
 def print_header():
     """Print application header."""
+    C, M, G, B, R, GREY = (
+        Colors.CYAN, Colors.MAGENTA, Colors.GREEN, Colors.BOLD, Colors.RESET, Colors.GREY,
+    )
     print()
-    print("=" * 60)
-    print(f"{Colors.BOLD}Arc Bookmarks Tool{Colors.RESET}")
-    print("=" * 60)
+    print(f"{M}{B}  arc {C}→{M} zen{R}   {GREY}move your stuff from Arc to Zen{R}")
+    print(f"{GREY}  ────────────────────────────────────────────────{R}")
+    print(f"  {G}✓ your Zen data gets backed up first, so you can't lose anything{R}")
 
 
 def print_menu():
     """Print main menu."""
+    C, G, Y, B, R, GREY = (
+        Colors.CYAN, Colors.GREEN, Colors.YELLOW, Colors.BOLD, Colors.RESET, Colors.GREY,
+    )
     print()
-    print("Choose an option:")
+    print(f"  {G}{B}1{R}  {B}Move everything{R}  {GREY}spaces, pinned tabs, folders + logins{R}")
     print()
-    print(f"  {Colors.CYAN}1{Colors.RESET}. Export Arc bookmarks to HTML file")
-    print(f"  {Colors.CYAN}2{Colors.RESET}. Export Zen bookmarks to HTML file")
-    print(f"  {Colors.CYAN}3{Colors.RESET}. Migrate Arc bookmarks to Zen Browser")
+    print(f"  {GREY}── or just one part ──{R}")
+    print(f"  {C}2{R}  Move bookmarks & spaces")
+    print(f"  {C}3{R}  Move logins (cookies)")
+    print(f"  {C}4{R}  Export Arc bookmarks to HTML")
+    print(f"  {C}5{R}  Export Zen bookmarks to HTML")
     print()
-    print(f"  {Colors.YELLOW}4{Colors.RESET}. Restore Zen from backup")
-    print(f"  {Colors.YELLOW}5{Colors.RESET}. Delete all backups")
+    print(f"  {Y}6{R}  Restore Zen from a backup")
+    print(f"  {Y}7{R}  Delete backups")
     print()
-    print(f"  {Colors.GREY}0{Colors.RESET}. Exit")
+    print(f"  {GREY}0  Quit{R}")
     print()
 
 
@@ -287,6 +295,59 @@ def migrate_to_zen():
         print(f"\n{Colors.RED}Unexpected error:{Colors.RESET} {e}")
 
 
+def move_everything():
+    """Move as much as possible from Arc to Zen in one pass."""
+    print()
+    print("-" * 60)
+    print("Move everything from Arc to Zen")
+    print("-" * 60)
+    print(
+        "\nThis moves your spaces, pinned tabs, folders and logged-in cookies.\n"
+        "Your Zen data is backed up first. You'll get one macOS prompt to read\n"
+        "Arc's cookie key from your Keychain (click Always Allow)."
+    )
+
+    wait_for_zen_closed()
+
+    try:
+        from core import migrate_everything
+        if migrate_everything():
+            print("\nExiting...")
+            sys.exit(0)
+    except ImportError as e:
+        print(f"\n{Colors.RED}Error:{Colors.RESET} {e}")
+        print("Make sure dependencies are installed: pip install lz4 cryptography")
+    except Exception as e:
+        print(f"\n{Colors.RED}Unexpected error:{Colors.RESET} {e}")
+
+
+def migrate_cookies():
+    """Migrate Arc cookies to Zen so logged-in sites stay logged in."""
+    print()
+    print("-" * 60)
+    print("Migrate Cookies (keep sites logged in)")
+    print("-" * 60)
+    print(
+        "\nThis decrypts Arc's cookies and copies them into Zen. You'll get one\n"
+        "macOS prompt to read Arc's key from your Keychain (click Always Allow).\n"
+        "Zen's cookies are backed up first and never overwritten."
+    )
+
+    # The cookie DB is locked while Zen runs.
+    wait_for_zen_closed()
+
+    try:
+        from core import migrate_cookies_to_zen
+        if migrate_cookies_to_zen():
+            print("\nExiting...")
+            sys.exit(0)
+    except ImportError as e:
+        print(f"\n{Colors.RED}Error:{Colors.RESET} {e}")
+        print("Make sure dependencies are installed: pip install lz4 cryptography")
+    except Exception as e:
+        print(f"\n{Colors.RED}Unexpected error:{Colors.RESET} {e}")
+
+
 def restore_backup_menu():
     """Restore Zen session files from backup."""
     print()
@@ -386,14 +447,18 @@ def main():
         choice = input("Select option: ").strip()
         
         if choice == "1":
-            export_bookmarks()
+            move_everything()
         elif choice == "2":
-            export_zen_bookmarks()
-        elif choice == "3":
             migrate_to_zen()
+        elif choice == "3":
+            migrate_cookies()
         elif choice == "4":
-            restore_backup_menu()
+            export_bookmarks()
         elif choice == "5":
+            export_zen_bookmarks()
+        elif choice == "6":
+            restore_backup_menu()
+        elif choice == "7":
             delete_backups_menu()
         elif choice == "0" or choice.lower() == "q":
             print("\nBye!")

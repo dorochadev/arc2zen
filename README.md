@@ -2,176 +2,164 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A tool for exporting bookmarks from Arc Browser and Zen Browser to HTML format, and migrating bookmarks directly from Arc to Zen Browser.
+Move your life from **Arc** to **Zen** in one command: spaces, pinned tabs,
+folders, and your **logged-in sessions** (cookies), so most sites stay signed in.
 
-**[RU](README_RU.md)**
+> This is a fork of [olegfour3/arc2zen](https://github.com/olegfour3/arc2zen),
+> which does the bookmark/space migration. It adds cookie migration (keep sites
+> logged in), a one-shot "move everything" flow, and a fix for Zen profile
+> detection. See [Credits](#credits).
+
+**macOS only.** Arc is Chromium-based and Zen is a Firefox fork, so this bridges
+the two very different data formats. **[RU](README_RU.md)**
 
 ## Features
 
-- **Export Arc bookmarks** to HTML (preserves order, compatible with all browsers)
-- **Export Zen bookmarks** to HTML (preserves order, compatible with all browsers)
-- **Direct migration** from Arc to Zen (preserves folder structure and tab order)
-- **Multi-profile support** for Arc and Zen
-- **macOS only**
+- **Move everything** from Arc to Zen in one pass, with no manual setup
+- **Spaces, pinned tabs and folders** become Zen workspaces (created for you)
+- **Cookies / logins** carried over so most sites stay signed in
+- **Export Arc or Zen bookmarks** to HTML (works with any browser)
+- **Backs up your Zen data first**, and never overwrites existing cookies
 
 ## Quick Start
 
 ### With uv (recommended)
 
 ```bash
-git clone https://github.com/olegfour3/arc2zen.git
+git clone https://github.com/dorochadev/arc2zen.git
 cd arc2zen
 uv run main.py
 ```
 
-`uv` will automatically create a virtual environment and install dependencies.
+`uv` creates a virtual environment and installs dependencies automatically.
 
 ### With pip
 
 ```bash
-git clone https://github.com/olegfour3/arc2zen.git
+git clone https://github.com/dorochadev/arc2zen.git
 cd arc2zen
-pip install lz4
+pip install lz4 cryptography
 python main.py
 ```
 
 ## Requirements
 
-- Python 3.10+
-- `lz4` package (for Zen Browser operations)
-
-When using `uv`, dependencies are installed automatically.
+- macOS, Python 3.10+
+- `lz4` (Zen session files) and `cryptography` (cookie decryption)
 
 ## Usage
 
-Run the script and select an option from the menu:
+**Quit Zen first** (its data files are locked while it runs), then run the tool:
 
 ```
-============================================================
-Arc Bookmarks Tool
-============================================================
+  arc → zen   move your stuff from Arc to Zen
+  ────────────────────────────────────────────────
+  ✓ your Zen data gets backed up first, so you can't lose anything
 
-Choose an option:
+  1  Move everything  spaces, pinned tabs, folders + logins
 
-  1. Export Arc bookmarks to HTML file
-  2. Export Zen bookmarks to HTML file
-  3. Migrate Arc bookmarks to Zen Browser
+  ── or just one part ──
+  2  Move bookmarks & spaces
+  3  Move logins (cookies)
+  4  Export Arc bookmarks to HTML
+  5  Export Zen bookmarks to HTML
 
-  0. Exit
+  6  Restore Zen from a backup
+  7  Delete backups
+
+  0  Quit
 ```
 
-### Option 1: Export Arc Bookmarks
+### 1. Move everything (recommended)
 
-Exports all pinned bookmarks from Arc Browser to a standard HTML file.
+Creates a Zen workspace for each Arc space, imports the pinned tabs and folders,
+then migrates your cookies. You get **one macOS prompt** to let it read Arc's
+cookie key from your Keychain, click **Always Allow**.
 
-- Auto-generated filename with date or custom name
+### 2 / 3. Move one part
 
-### Option 2: Export Zen Bookmarks
+Run just the bookmark/space migration, or just the cookie migration.
 
-Exports all pinned tabs from Zen Browser to HTML format.
+### 4 / 5. Export to HTML
 
-- Preserves workspace structure as folders
-- Preserves folder hierarchy
+Export Arc or Zen pinned bookmarks to a standard HTML file for any browser.
 
-### Option 3: Migrate Arc to Zen
+### 6 / 7. Backups
 
-Directly imports Arc bookmarks into Zen Browser.
+Restore your Zen session from an automatic backup, or delete old backups.
 
-**Important:**
-- Zen Browser must be **closed** before migration
-- The script automatically checks if Zen is running
-- Creates backups before making changes
-- Requires matching workspaces in Zen (will prompt to create missing ones)
+## What transfers (and what can't)
 
-## File Locations
+| Data | Transfers? |
+| --- | --- |
+| Spaces, pinned tabs, folders | Yes, as Zen workspaces |
+| Logins stored in cookies | Mostly yes |
+| Saved passwords | Manually (see below), it's the reliable fallback |
+| Session-only logins, or logins kept in localStorage/IndexedDB (e.g. Slack) | No, different browser engines |
+| History, extensions, split views | No |
 
-### Arc Browser Data
+Because Arc (Chromium) and Zen (Firefox) use different engines, live sessions
+can't all be transplanted. Cookie-based logins usually survive; sites that bind
+sessions to the browser or store tokens outside cookies will ask you to log in
+again. For those, migrating passwords makes re-login one click.
 
-`~/Library/Application Support/Arc/StorableSidebar.json`
+## How the cookie migration works
 
-### Zen Browser Data
+Arc stores cookies in an encrypted Chromium database. The key lives in your
+login Keychain as "Arc Safe Storage". The tool:
 
-`~/Library/Application Support/zen/Profiles/`
+1. reads that key locally (it never leaves your machine),
+2. decrypts Arc's **persistent** cookies (AES-128-CBC, `v10`),
+3. converts timestamps (Firefox stores cookie expiry in **milliseconds**),
+4. inserts them into Zen's `cookies.sqlite` with `INSERT OR IGNORE`,
+5. raises `network.cookie.maxNumber` so Zen keeps them all.
 
-## Migrating Passwords (Manual)
+Zen's cookie files are backed up first (`*.cookiebak_<timestamp>`).
 
-This tool does not migrate passwords (different security systems). Follow these steps manually:
+## Migrating passwords (manual)
 
-### Export from macOS (Arc uses iCloud Keychain)
-1. Open **Passwords** app (macOS Sequoia+) or **Keychain Access**
-2. **Passwords app:** File → Export All Passwords → Save as CSV
-3. **Keychain Access:** File → Export Items
+Different security systems, so passwords are a quick manual step:
 
-### Import to Zen
-1. Open Zen Browser
-2. Go to `about:logins`
-3. Click **⋯** (menu) → **Import from a File...**
-4. Select the CSV file
+1. In Arc, open `arc://password-manager/settings` and **Export** to CSV.
+2. In Zen, open `about:logins` → **⋯** → **Import from a File** → pick the CSV.
+3. **Delete the CSV** afterward, it holds plain-text passwords.
 
-> **Security:** Delete the CSV file after import — it contains plain text passwords.
+## File locations
 
-## Importing HTML to Browsers
+- Arc sidebar: `~/Library/Application Support/Arc/StorableSidebar.json`
+- Arc cookies: `~/Library/Application Support/Arc/User Data/Default/Cookies`
+- Zen profiles: `~/Library/Application Support/zen/Profiles/`
 
-### Chrome / Chromium
-1. Go to `chrome://bookmarks/`
-2. Click ⋮ → "Import bookmarks"
-3. Select the HTML file
-
-### Firefox
-1. Press `Ctrl+Shift+B` (Bookmarks Manager)
-2. "Import and Backup" → "Import Bookmarks from HTML"
-
-### Safari
-1. File → "Import From" → "Bookmarks HTML File"
-
-### Edge
-1. Click ⋯ → "Favorites" → "Manage favorites"
-2. Click ⋯ → "Import favorites" → "Bookmarks HTML file"
-
-## Project Structure
+## Project structure
 
 ```
 arc2zen/
-├── main.py              # Main entry point
-├── pyproject.toml       # Project config and dependencies
+├── main.py                   # Menu / entry point
 ├── core/
-│   ├── __init__.py
-│   ├── models.py        # Data classes
-│   ├── arc_exporter.py  # Arc Browser operations
-│   ├── zen_exporter.py  # Zen export to HTML
-│   └── zen_importer.py  # Arc to Zen migration
-├── README.md
-├── README_RU.md
-└── LICENSE
+│   ├── arc_exporter.py       # Read + parse Arc data
+│   ├── zen_exporter.py       # Export Zen bookmarks to HTML
+│   ├── zen_importer.py       # Import Arc bookmarks/spaces into Zen
+│   ├── zen_profile.py        # Locate the active Zen profile
+│   ├── cookie_migrator.py    # Decrypt Arc cookies -> Zen cookies.sqlite
+│   ├── full_migrator.py      # "Move everything" orchestration
+│   └── models.py
+└── tests/                    # Unit tests
 ```
 
 ## Troubleshooting
 
-### "File not found" for Arc
-- Ensure Arc Browser is installed and has been run at least once
+- **"No Zen profile found":** open Zen once, then fully quit it and retry.
+- **"Could not read Arc Safe Storage":** click **Always Allow** on the macOS prompt.
+- **Sites still logged out:** those use non-cookie sessions, import passwords instead.
+- **Only pinned tabs migrated:** unpinned "today" tabs are not included (by design).
+- **Want to undo:** menu option 6 restores from an automatic backup.
 
-### "Zen Browser profile not found"
-- Ensure Zen Browser is installed and has been run at least once
+## Credits
 
-### "lz4 module required"
-```bash
-uv run main.py   # installs automatically
-# or
-pip install lz4
-```
-
-### Missing bookmarks after migration
-- Only **pinned** tabs are migrated
-- Unpinned tabs are not included
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues or pull requests.
-
-## Support
-
-If you find this project helpful, please give it a ⭐ star!
+- Original tool and bookmark/space migration: [Oleg Pashuk (olegfour3)](https://github.com/olegfour3/arc2zen)
+- Zen profile-detection fix: [Piers](https://github.com/olegfour3/arc2zen/pull/3)
+- Cookie migration, one-shot flow, and packaging in this fork
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+[MIT](LICENSE).

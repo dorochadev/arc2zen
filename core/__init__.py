@@ -11,6 +11,8 @@ from .arc_exporter import (
 )
 from .zen_exporter import export_zen_to_html
 from .zen_importer import import_to_zen
+from .cookie_migrator import migrate_cookies as migrate_cookies_to_zen
+from .full_migrator import migrate_everything
 
 __all__ = [
     # Models
@@ -29,4 +31,8 @@ __all__ = [
     "export_zen_to_html",
     # Zen importer
     "import_to_zen",
+    # Cookie migrator
+    "migrate_cookies_to_zen",
+    # Full migrator
+    "migrate_everything",
 ]

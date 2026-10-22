@@ -1,7 +1,7 @@
 [project]
 name = "arc2zen"
-version = "1.0.0"
-description = "Export Arc/Zen Browser bookmarks to HTML and migrate from Arc to Zen"
+version = "1.1.0"
+description = "Migrate Arc Browser to Zen: bookmarks, spaces, pinned tabs and logged-in cookies"
 requires-python = ">=3.10"
 authors = [
     { name = "Oleg Pashuk", email = "olegfour3@gmail.com" },
@@ -9,4 +9,5 @@ authors = [
 license = { text = "MIT" }
 dependencies = [
     "lz4",
+    "cryptography",
 ]
