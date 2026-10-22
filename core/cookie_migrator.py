@@ -66,13 +66,25 @@ def chromium_us_to_firefox_us(chromium_utc: int) -> int:
     return int(chromium_utc - EPOCH_DELTA_US)
 
 
-def map_same_site(chromium_value: int) -> int:
-    """Map Chromium's same_site enum to Firefox's.
+def map_same_site(chromium_value: int, is_secure: bool) -> int:
+    """Map Chromium's same_site enum to Firefox's, without weakening CSRF
+    protection.
 
     Chromium: -1 unspecified, 0 none, 1 lax, 2 strict.
     Firefox:   0 none,        1 lax,  2 strict.
+
+    Unspecified and unknown values become Lax, matching how modern browsers
+    treat a cookie with no SameSite attribute. SameSite=None is only honoured
+    when the cookie is Secure (per spec); otherwise it also falls back to Lax.
+    Mapping these to None instead would make cookies sendable cross-site.
     """
-    return {-1: 0, 0: 0, 1: 1, 2: 2}.get(chromium_value, 0)
+    if chromium_value == 2:
+        return 2  # strict
+    if chromium_value == 1:
+        return 1  # lax
+    if chromium_value == 0:
+        return 0 if is_secure else 1  # None requires Secure, else Lax
+    return 1  # unspecified / unknown -> Lax
 
 
 def strip_domain_hash(plaintext: bytes, host_key: str) -> bytes:
@@ -200,11 +212,11 @@ def migrate_cookies(arc_profile: str = "Default") -> bool:
     rows = source.execute(
         "SELECT host_key, name, encrypted_value, path, expires_utc, is_secure, "
         "is_httponly, last_access_utc, creation_utc, samesite, is_persistent, "
-        "has_expires FROM cookies"
+        "has_expires, top_frame_site_key FROM cookies"
     ).fetchall()
     source.close()
 
-    imported, duplicate, skipped, failed = _insert_rows(zen_db, rows, key)
+    imported, duplicate, skipped, partitioned, failed = _insert_rows(zen_db, rows, key)
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -216,6 +228,7 @@ def migrate_cookies(arc_profile: str = "Default") -> bool:
     print(f"  imported            : {imported}")
     print(f"  already in Zen      : {duplicate}")
     print(f"  skipped (session/expired): {skipped}")
+    print(f"  skipped (partitioned): {partitioned}")
     print(f"  failed to decrypt   : {failed}")
     print(f"  total Arc cookies   : {len(rows)}")
     print("\nOpen Zen and check your sites. Anything still logged out uses a")
@@ -223,19 +236,27 @@ def migrate_cookies(arc_profile: str = "Default") -> bool:
     return True
 
 
-def _insert_rows(zen_db: Path, rows, key: bytes) -> Tuple[int, int, int, int]:
+def _insert_rows(zen_db: Path, rows, key: bytes) -> Tuple[int, int, int, int, int]:
     """Insert decrypted rows into Zen's moz_cookies. Returns
-    (imported, duplicate, skipped, failed)."""
+    (imported, duplicate, skipped, partitioned, failed)."""
     connection = sqlite3.connect(zen_db)
     connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     cursor = connection.cursor()
 
-    imported = duplicate = skipped = failed = 0
+    imported = duplicate = skipped = partitioned = failed = 0
     now_us = int(time.time() * 1_000_000)
     now_ms = int(time.time() * 1000)
 
     for (host, name, encrypted, path, expires_utc, is_secure, is_httponly,
-         last_utc, creation_utc, same_site, is_persistent, has_expires) in rows:
+         last_utc, creation_utc, same_site, is_persistent, has_expires,
+         top_frame_site_key) in rows:
+        # Partitioned (CHIPS) cookies are scoped to a top-level site. Importing
+        # them with no partition would make an isolated cookie global, so skip
+        # them rather than silently break that isolation. These are embedded
+        # third-party contexts, not first-party logins.
+        if top_frame_site_key and top_frame_site_key.strip():
+            partitioned += 1
+            continue
         if not is_persistent or not has_expires:
             skipped += 1
             continue
@@ -261,7 +282,8 @@ def _insert_rows(zen_db: Path, rows, key: bytes) -> Tuple[int, int, int, int]:
                 "VALUES ('', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?)",
                 (name, value, host, path, expiry_ms, last_access, creation,
                  1 if is_secure else 0, 1 if is_httponly else 0,
-                 map_same_site(same_site), 2 if is_secure else 1, now_us),
+                 map_same_site(same_site, bool(is_secure)),
+                 2 if is_secure else 1, now_us),
             )
             if cursor.rowcount:
                 imported += 1
@@ -273,4 +295,4 @@ def _insert_rows(zen_db: Path, rows, key: bytes) -> Tuple[int, int, int, int]:
     connection.commit()
     connection.execute("PRAGMA wal_checkpoint(FULL)")
     connection.close()
-    return imported, duplicate, skipped, failed
+    return imported, duplicate, skipped, partitioned, failed

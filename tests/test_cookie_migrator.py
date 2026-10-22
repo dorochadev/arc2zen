@@ -29,12 +29,16 @@ class ConversionTests(unittest.TestCase):
         micros = chromium_us_to_firefox_us(FUTURE_CHROMIUM_US)
         self.assertEqual(micros, FUTURE_UNIX_S * 1_000_000)
 
-    def test_same_site_mapping(self):
-        self.assertEqual(map_same_site(-1), 0)  # unspecified -> none
-        self.assertEqual(map_same_site(0), 0)   # none
-        self.assertEqual(map_same_site(1), 1)   # lax
-        self.assertEqual(map_same_site(2), 2)   # strict
-        self.assertEqual(map_same_site(99), 0)  # unknown -> none
+    def test_same_site_mapping_does_not_downgrade_to_none(self):
+        # Unspecified / unknown must become Lax, never None (CSRF protection).
+        self.assertEqual(map_same_site(-1, True), 1)
+        self.assertEqual(map_same_site(-1, False), 1)
+        self.assertEqual(map_same_site(99, True), 1)
+        self.assertEqual(map_same_site(1, False), 1)   # lax
+        self.assertEqual(map_same_site(2, False), 2)   # strict
+        # SameSite=None is only kept when the cookie is Secure.
+        self.assertEqual(map_same_site(0, True), 0)    # none + secure -> none
+        self.assertEqual(map_same_site(0, False), 1)   # none, not secure -> lax
 
     def test_strip_domain_hash_removes_prefix_when_present(self):
         host = ".example.com"
@@ -83,25 +87,30 @@ class InsertRowsTests(unittest.TestCase):
             # needing a real AES key.
             rows = [
                 # host, name, enc, path, expires_utc, is_secure, is_httponly,
-                # last_utc, creation_utc, same_site, is_persistent, has_expires
+                # last_utc, creation_utc, same_site, is_persistent, has_expires,
+                # top_frame_site_key
                 (".example.com", "sid", b"enc", "/", FUTURE_CHROMIUM_US, 1, 1,
-                 FUTURE_CHROMIUM_US, FUTURE_CHROMIUM_US, 1, 1, 1),
+                 FUTURE_CHROMIUM_US, FUTURE_CHROMIUM_US, 1, 1, 1, ""),
                 # duplicate unique key -> should be ignored
                 (".example.com", "sid", b"enc", "/", FUTURE_CHROMIUM_US, 1, 1,
-                 FUTURE_CHROMIUM_US, FUTURE_CHROMIUM_US, 1, 1, 1),
+                 FUTURE_CHROMIUM_US, FUTURE_CHROMIUM_US, 1, 1, 1, ""),
                 # session cookie -> skipped
                 (".example.com", "tmp", b"enc", "/", FUTURE_CHROMIUM_US, 1, 1,
-                 FUTURE_CHROMIUM_US, FUTURE_CHROMIUM_US, 1, 0, 0),
+                 FUTURE_CHROMIUM_US, FUTURE_CHROMIUM_US, 1, 0, 0, ""),
                 # already expired -> skipped
                 (".old.com", "dead", b"enc", "/", 11_644_473_600 * 1_000_000, 1,
-                 1, 0, 0, 0, 1, 1),
+                 1, 0, 0, 0, 1, 1, ""),
+                # partitioned cookie -> skipped (would break isolation)
+                (".ads.com", "track", b"enc", "/", FUTURE_CHROMIUM_US, 1, 1,
+                 FUTURE_CHROMIUM_US, FUTURE_CHROMIUM_US, 1, 1, 1, "https://news.com"),
             ]
             with patch("core.cookie_migrator.decrypt_value", return_value="value1"):
-                imported, duplicate, skipped, failed = _insert_rows(db, rows, key)
+                imported, duplicate, skipped, partitioned, failed = _insert_rows(db, rows, key)
 
             self.assertEqual(imported, 1)
             self.assertEqual(duplicate, 1)
             self.assertEqual(skipped, 2)
+            self.assertEqual(partitioned, 1)
             self.assertEqual(failed, 0)
 
             conn = sqlite3.connect(db)
